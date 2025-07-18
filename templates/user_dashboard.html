@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Welcome, {{ current_user.username }}</h2>
+<h3>Available Parking Lots</h3>
+<ul class="list-group">
+    {% for lot in lots %}
+    <li class="list-group-item">
+        {{ lot.prime_location_name }} at {{ lot.address }}
+        <a href="{{ url_for('book_spot', lot_id=lot.id) }}" class="btn btn-primary btn-sm float-right">Book Spot</a>
+    </li>
+    {% endfor %}
+</ul>
+<!-- Show user current bookings and booking history -->
+{% endblock %}

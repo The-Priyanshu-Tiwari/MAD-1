@@ -14,19 +14,16 @@ app.config['SECRET_KEY'] = os.urandom(24)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///parking.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Create database tables within app context
 with app.app_context():
     db.create_all()
-    # Create admin user if not exists
     if not User.query.filter_by(username='admin').first():
         admin = User(
             username='admin',
-            password=generate_password_hash('admin'),  # Removed method parameter
+            password=generate_password_hash('admin'),
             role='admin'
         )
         db.session.add(admin)
@@ -36,46 +33,90 @@ with app.app_context():
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-@app.route('/')
-def home():
-    return render_template('login.html')
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        if request.is_json:
+            data = request.get_json() or {}
+            username = data.get('username')
+            password = data.get('password')
+            role = data.get('role', 'user')
+            if not username or not password:
+                return jsonify({'error': 'Username and password are required'}), 400
+            if User.query.filter_by(username=username).first():
+                return jsonify({'error': 'Username already exists'}), 409
+
+            hashed_password = generate_password_hash(password)
+            new_user = User(username=username, password=hashed_password, role=role)
+            db.session.add(new_user)
+            db.session.commit()
+            return jsonify({'message': 'Account created successfully!'}), 201
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            role = request.form.get('role', 'user')
+
+            if not username or not password:
+                flash('Username and password are required', 'danger')
+                return redirect(url_for('register'))
+
+            if User.query.filter_by(username=username).first():
+                flash('Username already exists', 'danger')
+                return redirect(url_for('register'))
+
+            hashed_password = generate_password_hash(password)
+            new_user = User(username=username, password=hashed_password, role=role)
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Account created successfully!', 'success')
+            return redirect(url_for('login'))
+
+    return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        if request.is_json:
+            data = request.get_json() or {}
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
+
+        print(f'Login attempt for username: {username} with password: {password}')
+
         user = User.query.filter_by(username=username).first()
-        
-        if user and check_password_hash(user.password, password):
+        print(f'User found in DB: {user}')
+
+        if user:
+            from werkzeug.security import check_password_hash
+            pwd_check = check_password_hash(user.password, password)
+            print(f'Password hash matches: {pwd_check}')
+        else:
+            pwd_check = False
+
+        if user and pwd_check:
             login_user(user)
+            if request.is_json:
+                return jsonify({
+                    'message': 'Logged in successfully!',
+                    'username': user.username,
+                    'role': user.role
+                }), 200
             flash('Logged in successfully!', 'success')
             if user.role == 'admin':
                 return redirect(url_for('admin_dashboard'))
-            return redirect(url_for('user_dashboard'))
+            else:
+                return redirect(url_for('user_dashboard'))
+
+        if request.is_json:
+            return jsonify({'error': 'Invalid username or password'}), 401
         flash('Invalid username or password', 'danger')
+
     return render_template('login.html')
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists', 'danger')
-            return redirect(url_for('register'))
-        
-        new_user = User(
-            username=username,
-            password=generate_password_hash(password),  # Removed method parameter
-            role='user'
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        flash('Account created successfully!', 'success')
-        return redirect(url_for('login'))
-    return render_template('register.html')
 
 @app.route('/logout')
 @login_required
@@ -143,51 +184,67 @@ def get_parking_slots(lot_id):
 def book_parking_spot():
     data = request.json
     spot_id = data.get('spot_id')
-    duration_minutes = data.get('duration_minutes', 60)  # Default 60 minutes booking
+    duration_minutes = data.get('duration_minutes', 60)  # default to 60 minutes
+    start_time_str = data.get('start_time')  # new field, optional
 
+    # Validate spot_id
     spot = ParkingSpot.query.get(spot_id)
     if not spot:
         return jsonify({'error': 'Parking spot not found'}), 404
 
-    # Check if spot is available
-    if spot.status == 'A':
-        now = datetime.utcnow()
-        end_time = now + timedelta(minutes=duration_minutes)
-        cost = duration_minutes / 60 * spot.parking_lot.price  # Calculate cost based on lot price
-
-        booking = Booking(
-            spot_id=spot.id,
-            user_id=current_user.id,
-            start_time=now,
-            end_time=end_time,
-            cost=cost
-        )
-        db.session.add(booking)
-        spot.status = 'O'
-        db.session.commit()
-        return jsonify({
-            'message': 'Booking confirmed',
-            'spot_id': spot.id,
-            'start_time': booking.start_time.isoformat(),
-            'end_time': booking.end_time.isoformat(),
-            'cost': booking.cost
-        }), 201
+    # Parse start_time if provided
+    if start_time_str:
+        try:
+            # Expecting ISO 8601 format, e.g. '2025-07-24T18:00:00'
+            start_time = datetime.fromisoformat(start_time_str)
+        except ValueError:
+            return jsonify({'error': 'Invalid start_time format. Use ISO 8601 format.'}), 400
     else:
-        # Spot is occupied, find when will be free
-        current_booking = Booking.query.filter(
-            Booking.spot_id == spot.id,
-            Booking.end_time > datetime.utcnow()
-        ).order_by(Booking.end_time.desc()).first()
+        start_time = datetime.utcnow()
 
-        if current_booking:
-            free_time = current_booking.end_time.isoformat()
-            return jsonify({'message': 'Spot occupied', 'will_be_free_at': free_time}), 409
-        else:
-            # If no active booking but status is still occupied (data inconsistency)
-            spot.status = 'A'
-            db.session.commit()
-            return jsonify({'message': 'Spot status reset. Please try booking again.'}), 409
-        
+    # Calculate end_time
+    end_time = start_time + timedelta(minutes=duration_minutes)
+
+    # Check if spot is available **for the requested time period**
+    # Here you should check if any existing booking overlaps with [start_time, end_time)
+    overlapping_booking = Booking.query.filter(
+        Booking.spot_id == spot_id,
+        Booking.end_time > start_time,
+        Booking.start_time < end_time
+    ).first()
+
+    if overlapping_booking:
+        return jsonify({
+            'message': 'Spot occupied',
+            'will_be_free_at': overlapping_booking.end_time.isoformat()
+        }), 409
+
+    # If available, create booking
+    cost = (duration_minutes / 60) * spot.parking_lot.price
+
+    booking = Booking(
+        spot_id=spot.id,
+        user_id=current_user.id,
+        start_time=start_time,
+        end_time=end_time,
+        cost=cost
+    )
+    db.session.add(booking)
+
+    # Update spot status to 'O' (Occupied) - but this is simplistic for bookings in future;
+    # ideally, a spot's occupancy depends on current datetime, not just bookings.
+    # You might want to manage spot status more dynamically in a complete app.
+    spot.status = 'O'
+
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Booking confirmed',
+        'spot_id': spot.id,
+        'start_time': booking.start_time.isoformat(),
+        'end_time': booking.end_time.isoformat(),
+        'cost': booking.cost
+    }), 201
 
 if __name__ == '__main__':
     app.run(debug=True)

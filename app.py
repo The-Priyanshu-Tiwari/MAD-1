@@ -136,13 +136,24 @@ def admin_dashboard():
 def user_dashboard():
     return render_template('user_dashboard.html')
 
+
+# Route to serve the Add Parking Lot HTML page (GET)
+@app.route('/admin/add_parking_lot', methods=['GET'])
+@login_required
+def add_parking_lot():
+    if current_user.role != 'admin':
+        return redirect(url_for('user_dashboard'))
+    return render_template('add_parking_lot.html')
+
+
+# API route to handle parking lot creation (POST)
 @app.route('/api/parkinglot', methods=['POST'])
 @login_required
 def create_parking_lot():
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
 
-    data = request.json
+    data = request.get_json() or {}
     name = data.get('name')
     price = data.get('price')
     address = data.get('address')
@@ -164,6 +175,9 @@ def create_parking_lot():
     return jsonify({'message': 'Parking lot created', 'parking_lot_id': parking_lot.id}), 201
 
 
+
+from datetime import datetime
+
 @app.route('/api/parkinglot/<int:lot_id>/slots', methods=['GET'])
 @login_required
 def get_parking_slots(lot_id):
@@ -173,10 +187,43 @@ def get_parking_slots(lot_id):
 
     spots = ParkingSpot.query.filter_by(lot_id=lot_id).all()
     spot_list = []
+    now = datetime.utcnow()
+
     for spot in spots:
-        spot_list.append({'id': spot.id, 'status': spot.status})
+        # Find active booking for spot, if any
+        active_booking = Booking.query.filter(
+            Booking.spot_id == spot.id,
+            Booking.start_time <= now,
+            Booking.end_time >= now
+        ).first()
+
+        cost = active_booking.cost if active_booking else None
+
+        spot_list.append({
+            'id': spot.id,
+            'status': spot.status,
+            'cost': spot.parking_lot.price,  # Use spot's lot price if no active booking
+        })
 
     return jsonify({'parking_lot': lot.name, 'spots': spot_list}), 200
+
+
+
+@app.route('/api/parkinglots', methods=['GET'])
+@login_required
+def get_all_parking_lots():
+    lots = ParkingLot.query.all()
+    lots_data = []
+    for lot in lots:
+        lots_data.append({
+            'id': lot.id,
+            'name': lot.name,
+            'address': lot.address,
+            'max_spots': lot.max_spots,
+            'price': lot.price
+        })
+    return jsonify(lots_data)
+
 
 
 @app.route('/api/bookings', methods=['POST'])
@@ -245,6 +292,28 @@ def book_parking_spot():
         'end_time': booking.end_time.isoformat(),
         'cost': booking.cost
     }), 201
+
+@app.route('/api/mybookings', methods=['GET'])
+@login_required
+def my_bookings():
+    bookings = Booking.query.filter_by(user_id=current_user.id).all()
+
+    result = []
+    for booking in bookings:
+        # Access related lot via booking.spot.parking_lot
+        lot_name = booking.spot.parking_lot.name if booking.spot and booking.spot.parking_lot else 'N/A'
+
+        result.append({
+            'id': booking.id,
+            'lot_name': lot_name,
+            'spot_id': booking.spot_id,
+            'start_time': booking.start_time.isoformat(),
+            'end_time': booking.end_time.isoformat() if booking.end_time else None,
+            'cost': booking.cost
+        })
+
+    return jsonify(result)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>All Parking Lots</h2>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Lot ID</th>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Price (per hour)</th>
+            <th>Total Spots</th>
+            <th>Available Spots</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="lotsBody">
+        <!-- populated dynamically with JS -->
+    </tbody>
+</table>
+<div id="lotMsg"></div>
+
+<script>
+async function loadParkingLots() {
+    const tbody = document.getElementById('lotsBody');
+    tbody.innerHTML = "";
+    // Fetch all lots from backend API (add this route if not present!)
+    let res = await fetch('/api/parkinglots', {credentials: 'same-origin'});
+    if(res.ok) {
+        let lots = await res.json();
+        for (const lot of lots) {
+            // Now fetch the slots for each lot for available count
+            let slotRes = await fetch(`/api/parkinglot/${lot.id}/slots`, {credentials: 'same-origin'});
+            let slotData = slotRes.ok ? await slotRes.json() : {spots: []};
+            let available = slotData.spots.filter(s => s.status === "A").length;
+            let row = `<tr>
+                <td>${lot.id}</td>
+                <td>${lot.name}</td>
+                <td>${lot.address || '-'}</td>
+                <td>${lot.price}</td>
+                <td>${lot.max_spots}</td>
+                <td>${available} / ${lot.max_spots}</td>
+                <td>
+                    <a href="/parking_lots/${lot.id}" class="btn btn-info btn-sm">View Slots</a>
+                </td>
+            </tr>`;
+            tbody.innerHTML += row;
+        }
+    } else {
+        document.getElementById('lotMsg').innerHTML = "<div class='alert alert-danger'>Failed to load parking lots.</div>";
+    }
+}
+window.onload = loadParkingLots;
+</script>
+{% endblock %}
+    

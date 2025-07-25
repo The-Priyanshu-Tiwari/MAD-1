@@ -1,0 +1,68 @@
+/* styles.css */
+
+/* Body padding for better look */
+body {
+    padding-bottom: 30px;
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Navbar custom style */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Form margin tweak */
+form .form-group {
+    margin-bottom: 1rem;
+}
+
+/* Buttons with margin */
+.btn {
+    margin-top: 10px;
+}
+
+/* Alerts with margin */
+.alert {
+    margin-top: 1rem;
+}
+
+/* Booking form card styling */
+#bookArea.card {
+    background-color: #ffffff;
+    border-radius: 5px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    padding: 20px;
+}
+
+/* Table custom style */
+table.table {
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+/* Status badges overrides */
+.badge.bg-success {
+    background-color: #28a745 !important;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+/* Responsive spacing */
+@media (max-width: 576px) {
+    .container {
+        padding: 10px;
+    }
+}
+
+/* Style links */
+a {
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}

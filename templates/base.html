@@ -12,14 +12,13 @@
     </nav>
     <div class="container mt-4">
         {% with messages = get_flashed_messages() %}
-          {% if messages %}
-              {% for msg in messages %}
-                  <div class="alert alert-info">{{ msg }}</div>
-              {% endfor %}
-          {% endif %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="alert alert-info">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
         {% endwith %}
-        {% block content %}
-        {% endblock %}
+        {% block content %}{% endblock %}
     </div>
 </body>
 </html>

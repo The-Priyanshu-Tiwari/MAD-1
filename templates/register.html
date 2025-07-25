@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Register</h2>
+<form id="registerForm">
+    <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" class="form-control" required />
+    </div>
+    <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" class="form-control" required />
+    </div>
+    <!-- Optionally show the role box for admin creation -->
+    <div class="form-group">
+        <label>Role <small>(admin/user)</small></label>
+        <input type="text" name="role" class="form-control" placeholder="user" />
+    </div>
+    <input type="submit" value="Register" class="btn btn-success"/>
+</form>
+<div id="registerMsg"></div>
+<a href="{{ url_for('login') }}">Back to Login</a>
+
+<script>
+document.getElementById('registerForm').onsubmit = function(e) {
+    e.preventDefault();
+    const form = this;
+    fetch('/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            username: form.username.value,
+            password: form.password.value,
+            role: form.role.value || "user"
+        }),
+        credentials: 'same-origin'
+    })
+    .then(response =>
+        response.json().then(data => ({status: response.status, body: data}))
+    ).then(result => {
+        const msg = document.getElementById('registerMsg');
+        if(result.status === 201) {
+            msg.innerHTML = `<div class="alert alert-success">${result.body.message || "Registration Successful!"}</div>`;
+            setTimeout(() => window.location.href = "{{ url_for('login') }}", 1200);
+        } else {
+            msg.innerHTML = `<div class="alert alert-danger">${result.body.error || "Registration failed!"}</div>`;
+        }
+    })
+    .catch(error => {
+        document.getElementById('registerMsg').innerHTML = `<div class="alert alert-danger">Error: ${error}</div>`;
+    });
+};
+</script>
+{% endblock %}

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Login</h2>
-<form method="POST">
+<form id="loginForm">
     <div class="form-group">
         <label>Username</label>
         <input type="text" name="username" class="form-control" required />
@@ -12,5 +12,39 @@
     </div>
     <input type="submit" value="Login" class="btn btn-primary"/>
 </form>
+<div id="loginMsg"></div>
 <a href="{{url_for('register')}}">Register as new user</a>
+
+<script>
+document.getElementById('loginForm').onsubmit = function(e) {
+    e.preventDefault();
+    const form = this;
+    fetch('/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            username: form.username.value,
+            password: form.password.value,
+        }),
+        credentials: 'same-origin' // important: include session cookie
+    })
+    .then(response =>
+        response.json().then(data => ({status: response.status, body: data}))
+    )
+   .then(result => {
+    const msg = document.getElementById('loginMsg');
+    if(result.status === 200) {
+        msg.innerHTML = `<div class="alert alert-success">${result.body.message}</div>`;
+        setTimeout(() => {
+            window.location.href = result.body.role === "admin" ? "/admin/dashboard" : "/user/dashboard";
+        }, 1000);
+    } else {
+        msg.innerHTML = `<div class="alert alert-danger">${result.body.error || 'Login failed!'}</div>`;
+    }
+})
+    .catch(error => {
+        document.getElementById('loginMsg').innerHTML = `<div class="alert alert-danger">Error: ${error}</div>`;
+    });
+};
+</script>
 {% endblock %}

@@ -1,193 +1,225 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Welcome, {{ current_user.username }}</h2>
+<style>
+body {
+  background-image: url("{{ url_for('static', filename='images/parking.jpg') }}");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  font-family: 'Segoe UI', sans-serif;
+  color: #ffffffff;
+}
 
-<!-- Section: My Bookings -->
-<h4 class="mt-4">My Bookings</h4>
-<table class="table table-sm" id="userBookingsTable">
-    <thead>
-        <tr>
+.overlay {
+  background-color: rgba(0, 0, 0, 0.07);
+  min-height: 100vh;
+  padding: 30px;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 25px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  color: #ffffffff;
+  margin-bottom: 30px;
+}
+.table th, .table td {
+  vertical-align: middle;
+  color: #000000;
+}
+.badge-success {
+  background-color: #28a745;
+}
+.badge-danger {
+  background-color: #dc3545;
+}
+.btn-primary, .btn-success {
+  font-weight: 600;
+}
+</style>
+
+
+
+    <!-- My Bookings Section -->
+    <div class="glass-card">
+      <h4 class="mb-3">📋 My Bookings</h4>
+      <table class="table table-bordered table-sm table-hover">
+        <thead class="table-light text-dark">
+          <tr>
             <th>Booking ID</th>
             <th>Lot</th>
             <th>Spot</th>
             <th>From</th>
             <th>To</th>
             <th>Cost</th>
-        </tr>
-    </thead>
-    <tbody id="bookingRows">
-    </tbody>
-</table>
-<div id="myBookingMsg"></div>
+          </tr>
+        </thead>
+        <tbody id="bookingRows"></tbody>
+      </table>
+      <div id="myBookingMsg"></div>
+    </div>
 
-<hr>
+    <!-- Browse Lots Section -->
+    <div class="glass-card">
+      <h4 class="mb-3">🅿️ Browse Parking Lots</h4>
+      <select id="lotSelect" class="form-select mb-3"></select>
 
-<div>
-    <h4 class="mt-4">Browse Parking Lots</h4>
-    <select id="lotSelect" class="form-select mb-3">
-        <!-- filled by JS -->
-    </select>
-</div>
-
-<!-- Slots listing for chosen lot -->
-<table class="table table-bordered">
-    <thead>
-        <tr>
+      <table class="table table-bordered table-hover">
+        <thead class="table-light text-dark">
+          <tr>
             <th>Spot ID</th>
             <th>Status</th>
             <th>Action</th>
             <th>Cost</th>
-        </tr>
-    </thead>
-    <tbody id="spotsBody">
-        <!-- JS populates this -->
-    </tbody>
-</table>
-<div id="spotMsg"></div>
+          </tr>
+        </thead>
+        <tbody id="spotsBody"></tbody>
+      </table>
+      <div id="spotMsg"></div>
+    </div>
 
-<!-- Book Spot Modal/Box -->
-<div id="bookArea" class="card card-body mt-3" style="display:none;">
-    <h4>Book Spot <span id="bookSpotId"></span></h4>
-    <form id="bookForm">
+    <!-- Booking Modal -->
+    <div id="bookArea" class="glass-card" style="display:none;">
+      <h4>📝 Book Spot <span id="bookSpotId"></span></h4>
+      <form id="bookForm">
         <input type="hidden" name="spot_id" id="bookSpotInput">
-        <div class="mb-2">
-            <label>Duration (minutes):</label>
-            <input class="form-control" type="number" name="duration_minutes" value="60" required>
+        <div class="mb-3">
+          <label>Duration (minutes):</label>
+          <input class="form-control" type="number" name="duration_minutes" value="60" required>
         </div>
-        <div class="mb-2">
-            <label>Start Time (optional):</label>
-            <input class="form-control" type="datetime-local" name="start_time">
+        <div class="mb-3">
+          <label>Start Time (optional):</label>
+          <input class="form-control" type="datetime-local" name="start_time">
         </div>
         <button type="submit" class="btn btn-primary">Book</button>
         <button type="button" class="btn btn-secondary" id="bookCancel">Cancel</button>
-    </form>
-    <div id="bookMsg"></div>
+      </form>
+      <div id="bookMsg" class="mt-3"></div>
+    </div>
+  </div>
 </div>
 
 <script>
 // --- My Bookings ---
 async function loadBookings() {
-    let tb = document.getElementById('bookingRows');
-    tb.innerHTML = "";
-    let res = await fetch('/api/mybookings', {credentials: 'same-origin'});
-    if (res.ok) {
-        let bookings = await res.json();
-        if (!bookings.length) {
-            tb.innerHTML = "<tr><td colspan=6>No bookings found.</td></tr>";
-        } else {
-            for (const b of bookings) {
-                tb.innerHTML += `<tr>
-                    <td>${b.id}</td>
-                    <td>${b.lot_name}</td>
-                    <td>${b.spot_id}</td>
-                    <td>${new Date(b.start_time).toLocaleString()}</td>
-                    <td>${new Date(b.end_time).toLocaleString()}</td>
-                    <td>${b.cost}</td>
-                </tr>`;
-            }
-        }
+  const tb = document.getElementById('bookingRows');
+  tb.innerHTML = "";
+  const res = await fetch('/api/mybookings', { credentials: 'same-origin' });
+  if (res.ok) {
+    const bookings = await res.json();
+    if (!bookings.length) {
+      tb.innerHTML = "<tr><td colspan=6>No bookings found.</td></tr>";
     } else {
-        document.getElementById('myBookingMsg').innerHTML = "Failed to load your bookings.";
+      for (const b of bookings) {
+        tb.innerHTML += `<tr>
+          <td>${b.id}</td>
+          <td>${b.lot_name}</td>
+          <td>${b.spot_id}</td>
+          <td>${new Date(b.start_time).toLocaleString()}</td>
+          <td>${new Date(b.end_time).toLocaleString()}</td>
+          <td>₹${b.cost.toFixed(2)}</td>
+        </tr>`;
+      }
     }
+  } else {
+    document.getElementById('myBookingMsg').innerHTML = "Failed to load your bookings.";
+  }
 }
-
 
 let lotsList = [];
 async function loadLots() {
-    let res = await fetch('/api/parkinglots', {credentials: 'same-origin'});
-    if(res.ok) {
-        lotsList = await res.json();
-        let sel = document.getElementById('lotSelect');
-        sel.innerHTML = "";
-        lotsList.forEach(lot => {
-            let option = document.createElement('option');
-            option.value = lot.id;
-            option.innerText = `${lot.name} (${lot.address || '-'})`;
-            sel.appendChild(option);
-        });
-        if(lotsList.length > 0) loadSpots(lotsList[0].id);
-    } else {
-        console.error("Failed to fetch parking lots");
-    }
+  const res = await fetch('/api/parkinglots', { credentials: 'same-origin' });
+  if (res.ok) {
+    lotsList = await res.json();
+    const sel = document.getElementById('lotSelect');
+    sel.innerHTML = "";
+    lotsList.forEach(lot => {
+      let opt = document.createElement('option');
+      opt.value = lot.id;
+      opt.innerText = `${lot.name} (${lot.address || '-'})`;
+      sel.appendChild(opt);
+    });
+    if (lotsList.length > 0) loadSpots(lotsList[0].id);
+  }
 }
-
 
 async function loadSpots(lot_id) {
-    let tbody = document.getElementById('spotsBody');
-    tbody.innerHTML = "";
-    let res = await fetch(`/api/parkinglot/${lot_id}/slots`, {credentials: 'same-origin'});
-    if(res.ok) {
-        let data = await res.json();
-        for(const spot of data.spots) {
-            let statusBadge = spot.status === 'A'
-                ? "<span class='badge bg-success'>Available</span>"
-                : "<span class='badge bg-danger'>Occupied</span>";
-            let bookBtn = spot.status === 'A'
-                ? `<button class="btn btn-sm btn-primary" onclick="showBookForm(${spot.id})">Book</button>`
-                : "-";
-            tbody.innerHTML += `<tr>
-                <td>${spot.id}</td>
-                <td>${statusBadge}</td>
-                <td>${bookBtn}</td>
-                <td>${spot.cost ? `₹${spot.cost.toFixed(2)}` : '-'}</td>
-            </tr>`;
-        }
-    } else {
-        tbody.innerHTML = "<tr><td colspan='3'>Failed to load parking spots.</td></tr>";
+  const tbody = document.getElementById('spotsBody');
+  tbody.innerHTML = "";
+  const res = await fetch(`/api/parkinglot/${lot_id}/slots`, { credentials: 'same-origin' });
+  if (res.ok) {
+    const data = await res.json();
+    for (const spot of data.spots) {
+      const statusBadge = spot.status === 'A'
+        ? "<span class='badge badge-success'>Available</span>"
+        : "<span class='badge badge-danger'>Occupied</span>";
+      const bookBtn = spot.status === 'A'
+        ? `<button class="btn btn-sm btn-success" onclick="showBookForm(${spot.id})">Book</button>`
+        : "-";
+      tbody.innerHTML += `<tr>
+        <td>${spot.id}</td>
+        <td>${statusBadge}</td>
+        <td>${bookBtn}</td>
+        <td>${spot.cost ? `₹${spot.cost.toFixed(2)}` : '-'}</td>
+      </tr>`;
     }
+  } else {
+    tbody.innerHTML = "<tr><td colspan='4'>Failed to load parking spots.</td></tr>";
+  }
 }
 
-document.getElementById('lotSelect').onchange = function() {
-    loadSpots(this.value);
+document.getElementById('lotSelect').onchange = function () {
+  loadSpots(this.value);
 };
 
-// --- Booking logic ---
 function showBookForm(spotId) {
-    document.getElementById('bookArea').style.display = "block";
-    document.getElementById('bookSpotId').innerText = spotId;
-    document.getElementById('bookSpotInput').value = spotId;
-    document.getElementById('bookMsg').innerText = "";
+  document.getElementById('bookArea').style.display = "block";
+  document.getElementById('bookSpotId').innerText = spotId;
+  document.getElementById('bookSpotInput').value = spotId;
+  document.getElementById('bookMsg').innerText = "";
 }
 
-document.getElementById('bookCancel').onclick = function() {
-    document.getElementById('bookArea').style.display = "none";
+document.getElementById('bookCancel').onclick = function () {
+  document.getElementById('bookArea').style.display = "none";
 };
 
-document.getElementById('bookForm').onsubmit = async function(e) {
-    e.preventDefault();
-    const form = this;
-    let spot_id = form.spot_id.value;
-    let duration_minutes = form.duration_minutes.value;
-    let start_time = form.start_time.value;
-    let body = {
-        spot_id: Number(spot_id),
-        duration_minutes: Number(duration_minutes)
-    };
-    if(start_time) body.start_time = new Date(start_time).toISOString();
+document.getElementById('bookForm').onsubmit = async function (e) {
+  e.preventDefault();
+  const form = this;
+  let body = {
+    spot_id: Number(form.spot_id.value),
+    duration_minutes: Number(form.duration_minutes.value)
+  };
+  if (form.start_time.value) {
+    body.start_time = new Date(form.start_time.value).toISOString();
+  }
 
-    let res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-        credentials: 'same-origin'
-    });
-    let data = await res.json();
-    let msg = document.getElementById('bookMsg');
-    if(res.status === 201) {
-        msg.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
-        setTimeout(()=>{
-            document.getElementById('bookArea').style.display = "none";
-            loadSpots(document.getElementById('lotSelect').value);
-            loadBookings();
-        }, 1200);
-    } else {
-        msg.innerHTML = `<div class="alert alert-danger">${data.error || data.message || "Booking failed!"}</div>`;
-    }
+  const res = await fetch('/api/bookings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: 'same-origin'
+  });
+
+  const data = await res.json();
+  const msg = document.getElementById('bookMsg');
+  if (res.status === 201) {
+    msg.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+    setTimeout(() => {
+      document.getElementById('bookArea').style.display = "none";
+      loadSpots(document.getElementById('lotSelect').value);
+      loadBookings();
+    }, 1000);
+  } else {
+    msg.innerHTML = `<div class="alert alert-danger">${data.error || data.message || "Booking failed!"}</div>`;
+  }
 };
 
-window.onload = function() {
-    loadLots();
-    loadBookings();
+window.onload = () => {
+  loadLots();
+  loadBookings();
 };
 </script>
 {% endblock %}

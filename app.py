@@ -190,7 +190,6 @@ def get_parking_slots(lot_id):
     now = datetime.utcnow()
 
     for spot in spots:
-        # Find active booking for spot, if any
         active_booking = Booking.query.filter(
             Booking.spot_id == spot.id,
             Booking.start_time <= now,
@@ -202,10 +201,16 @@ def get_parking_slots(lot_id):
         spot_list.append({
             'id': spot.id,
             'status': spot.status,
-            'cost': spot.parking_lot.price,  # Use spot's lot price if no active booking
+            'cost': spot.parking_lot.price,
         })
 
-    return jsonify({'parking_lot': lot.name, 'spots': spot_list}), 200
+    return jsonify({
+        'id': lot.id,
+        'parking_lot': lot.name,
+        'address': lot.address,
+        'price': lot.price,
+        'spots': spot_list
+    }), 200
 
 
 
@@ -313,6 +318,50 @@ def my_bookings():
         })
 
     return jsonify(result)
+
+@app.route('/api/parkinglot/<int:lot_id>', methods=['PUT'])
+@login_required
+def update_parking_lot(lot_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    lot = ParkingLot.query.get_or_404(lot_id)
+    data = request.get_json() or {}
+
+    lot.name = data.get('name', lot.name)
+    lot.address = data.get('address', lot.address)
+    lot.price = data.get('price', lot.price)
+    max_spots = data.get('max_spots', lot.max_spots)
+
+    # If spot count changed, only update count if more spots are needed
+    if max_spots > lot.max_spots:
+        for _ in range(max_spots - lot.max_spots):
+            spot = ParkingSpot(lot_id=lot.id, status='A')
+            db.session.add(spot)
+    lot.max_spots = max_spots
+
+    db.session.commit()
+    return jsonify({'message': 'Parking lot updated successfully'}), 200
+
+@app.route('/api/parkinglot/<int:lot_id>', methods=['DELETE'])
+@login_required
+def delete_parking_lot(lot_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    lot = ParkingLot.query.get_or_404(lot_id)
+
+    # First delete associated parking spots and bookings
+    bookings = Booking.query.join(ParkingSpot).filter(ParkingSpot.lot_id == lot.id).all()
+    for booking in bookings:
+        db.session.delete(booking)
+
+    ParkingSpot.query.filter_by(lot_id=lot.id).delete()
+    db.session.delete(lot)
+    db.session.commit()
+
+    return jsonify({'message': 'Parking lot deleted successfully'}), 200
+
 
 
 if __name__ == '__main__':

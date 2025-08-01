@@ -7,26 +7,23 @@ body {
   background-repeat: no-repeat;
   background-attachment: fixed;
   font-family: 'Segoe UI', sans-serif;
-  color: #fff;
+  color: #ffffff;
 }
-
 .admin-wrapper {
   background-color: rgba(0, 0, 0, 0.65);
   min-height: 100vh;
   padding: 40px;
 }
-
 .glass-card {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(71, 69, 69, 0.97);
   backdrop-filter: blur(10px);
   padding: 30px;
   border-radius: 16px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
   color: #fff;
 }
-
 .table th, .table td {
-  color: #000;
+  color: #000000;
 }
 </style>
 
@@ -35,28 +32,38 @@ body {
 
   <div class="glass-card">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">🅿️ Manage Parking Lots</h4>
-      <a href="{{ url_for('add_parking_lot') }}" class="btn btn-success">Add Parking Lot</a>
+      <h4 class="mb-0">🄹️ Manage Parking Lots</h4>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('add_parking_lot') }}" class="btn btn-success">Add Parking Lot</a>
+        <button class="btn btn-primary" onclick="toggleUserSection()">👤 User Details</button>
+      </div>
     </div>
 
-    <form id="lotForm" class="row g-3 mb-4">
-      <input type="hidden" name="id">
-      <div class="col-md-4">
-        <input class="form-control" name="name" required placeholder="Lot name">
+    <!-- User Detail Section (Hidden by default) -->
+    <div id="userSection" style="display:none;">
+      <h5 class="mt-3 mb-3">🧑‍💼 All Registered Users</h5>
+      <div class="mb-3">
+        <select class="form-select" id="userDropdown" onchange="loadUserDetails(this.value)">
+          <option selected disabled>Select a user</option>
+        </select>
       </div>
-      <div class="col-md-4">
-        <input class="form-control" name="address" placeholder="Address">
+
+      <!-- 🔁 Block/Unblock Button Section -->
+      <div id="userControlButtons" class="mb-3" style="display:none;">
+        <button id="blockUnblockBtn" class="btn btn-warning" onclick="toggleBlockUser()">Loading...</button>
       </div>
-      <div class="col-md-2">
-        <input class="form-control" name="price" type="number" step="0.01" required placeholder="Price/hr">
+
+      <div id="userDetailsBox" class="glass-card mt-3" style="display:none;">
+        <h6>User Booking History</h6>
+        <table class="table table-bordered table-sm table-hover">
+          <thead class="table-light text-dark">
+            <tr><th>ID</th><th>Lot</th><th>Spot</th><th>Start</th><th>End</th><th>Cost</th></tr>
+          </thead>
+          <tbody id="userBookingsTable"></tbody>
+        </table>
       </div>
-      <div class="col-md-2">
-        <input class="form-control" name="max_spots" type="number" required placeholder="Total spots">
-      </div>
-      <div class="col-md-12 d-grid">
-        <button type="submit" class="btn btn-primary">Create Lot</button>
-      </div>
-    </form>
+    </div>
+
     <div id="lotMsg" class="mb-4"></div>
 
     <div class="table-responsive">
@@ -74,6 +81,12 @@ body {
           <!-- JS will populate rows -->
         </tbody>
       </table>
+    </div>
+
+    <hr class="my-5">
+    <h4>📊 Revenue Summary</h4>
+    <div class="glass-card mt-3">
+      <canvas id="revenueChart" height="150"></canvas>
     </div>
   </div>
 </div>
@@ -104,111 +117,196 @@ body {
   </div>
 </div>
 
+<!-- Chart.js + JS Logic -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const lotForm = document.getElementById('lotForm');
-lotForm.onsubmit = async function(e) {
-  e.preventDefault();
-  const body = {
-    name: this.name.value,
-    address: this.address.value,
-    price: parseFloat(this.price.value),
-    max_spots: parseInt(this.max_spots.value)
-  };
-  const res = await fetch('/api/parkinglot', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
-    credentials: 'same-origin'
-  });
-  const data = await res.json();
-  document.getElementById('lotMsg').innerHTML =
-    res.status === 201
-      ? `<div class="alert alert-success">${data.message}</div>`
-      : `<div class="alert alert-danger">${data.error}</div>`;
-  if (res.status === 201) {
-    lotForm.reset();
-    loadLots();
+let selectedUser = null;
+let selectedUserBlocked = false;
+
+function toggleUserSection() {
+  const sec = document.getElementById("userSection");
+  sec.style.display = sec.style.display === "none" ? "block" : "none";
+}
+
+async function loadAllUsers() {
+  const res = await fetch('/api/admin/users');
+  if (res.ok) {
+    const users = await res.json();
+    const sel = document.getElementById("userDropdown");
+    sel.innerHTML = '<option selected disabled>Select a user</option>';
+    users
+      .filter(u => u.role !== 'admin')  // skip admin
+      .forEach(u => {
+        sel.innerHTML += `<option value="${u.id}">${u.username}</option>`;
+      });
   }
-};
+}
+
+async function loadUserDetails(uid) {
+  selectedUser = uid;
+  console.log("Loading user details for:", uid);
+  document.getElementById('userBookingsTable').innerHTML = '';
+  const bookingBox = document.getElementById('userDetailsBox');
+  bookingBox.style.display = 'none';
+
+  // Fetch bookings
+  const res = await fetch(`/api/admin/user/${uid}/bookings`);
+  const bookings = res.ok ? await res.json() : [];
+
+  if (bookings.length === 0) {
+    document.getElementById('userBookingsTable').innerHTML = '<tr><td colspan="6">No bookings found.</td></tr>';
+  } else {
+    bookings.forEach(b => {
+      document.getElementById('userBookingsTable').innerHTML += `
+        <tr>
+          <td>${b.id}</td>
+          <td>${b.lot_name}</td>
+          <td>${b.spot_id}</td>
+          <td>${new Date(b.start_time).toLocaleString()}</td>
+          <td>${new Date(b.end_time).toLocaleString()}</td>
+          <td>₹${b.cost.toFixed(2)}</td>
+        </tr>`;
+    });
+  }
+  bookingBox.style.display = 'block';
+
+  // Fetch block status
+  const userRes = await fetch(`/api/admin/user/${uid}`);
+  const userData = await userRes.json();
+  selectedUserBlocked = userData.is_blocked;
+
+  const btn = document.getElementById('blockUnblockBtn');
+  btn.innerText = selectedUserBlocked ? '✅ Unblock User' : '🚫 Block User';
+  btn.className = selectedUserBlocked ? 'btn btn-success' : 'btn btn-danger';
+
+  document.getElementById('userControlButtons').style.display = 'block';
+}
+
+async function toggleBlockUser() {
+  if (!selectedUser) return;
+
+  const url = `/api/admin/user/${selectedUser}/toggle_block`;
+  const res = await fetch(url, { method: 'PATCH' });
+
+  if (res.ok) {
+    selectedUserBlocked = !selectedUserBlocked;
+    const btn = document.getElementById('blockUnblockBtn');
+    btn.innerText = selectedUserBlocked ? '✅ Unblock User' : '🚫 Block User';
+    btn.className = selectedUserBlocked ? 'btn btn-success' : 'btn btn-danger';
+    alert('User status updated!');
+  } else {
+    alert('Failed to update user status.');
+  }
+}
+
 
 async function loadLots() {
   const tbody = document.getElementById('lotsBody');
   tbody.innerHTML = "";
-  for (let lot_id = 1; lot_id <= 100; lot_id++) {
-    const res = await fetch(`/api/parkinglot/${lot_id}/slots`, {credentials: 'same-origin'});
-    if (res.ok) {
-      const data = await res.json();
-      const spotCount = data.spots ? data.spots.length : 0;
-      const row = `<tr>
-        <td>${data.parking_lot}</td>
-        <td>${data.address || '-'}</td>
-        <td>${spotCount}</td>
-        <td>₹${data.price || '-'}</td>
-        <td>
-          <button class="btn btn-sm btn-warning me-1" onclick='openEditModal(${lot_id})'>Edit</button>
-          <button class="btn btn-sm btn-danger" onclick='deleteLot(${lot_id})'>Delete</button>
-        </td>
-      </tr>`;
-      tbody.innerHTML += row;
-    }
+  const res = await fetch('/api/parkinglots');
+  if (!res.ok) {
+    tbody.innerHTML = `<tr><td colspan="5">Failed to load lots</td></tr>`;
+    return;
   }
+  const lots = await res.json();
+  lots.forEach(lot => {
+    const row = `<tr>
+      <td>${lot.name}</td>
+      <td>${lot.address || '-'}</td>
+      <td>${lot.max_spots}</td>
+      <td>₹${lot.price}</td>
+      <td>
+        <button class="btn btn-sm btn-warning me-1" onclick='openEditModal(${lot.id})'>Edit</button>
+        <button class="btn btn-sm btn-danger" onclick='deleteLot(${lot.id})'>Delete</button>
+      </td>
+    </tr>`;
+    tbody.innerHTML += row;
+  });
 }
 
 async function openEditModal(id) {
-  const res = await fetch(`/api/parkinglot/${id}/slots`, {credentials: 'same-origin'});
+  const res = await fetch(`/api/parkinglot/${id}`);
   if (res.ok) {
     const data = await res.json();
-    console.log("Fetched lot data for edit:", data);
     const form = document.getElementById('editForm');
     form.id.value = id;
-    form.name.value = data.parking_lot;
+    form.name.value = data.name;
     form.address.value = data.address || '';
     form.price.value = data.price;
-    form.max_spots.value = data.spots.length;
+    form.max_spots.value = data.max_spots;
     new bootstrap.Modal(document.getElementById('editModal')).show();
+  } else {
+    document.getElementById('lotMsg').innerHTML = `<div class="alert alert-danger">Failed to load lot.</div>`;
   }
 }
 
-document.getElementById('editForm').onsubmit = async function(e) {
-  e.preventDefault();
-  const form = this;
-  const id = form.id.value;
-  const body = {
-    name: form.name.value,
-    address: form.address.value,
-    price: parseFloat(form.price.value),
-    max_spots: parseInt(form.max_spots.value)
-  };
-  const res = await fetch(`/api/parkinglot/${id}`, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
-    credentials: 'same-origin'
-  });
-  const data = await res.json();
-  document.getElementById('editMsg').innerHTML =
-    res.status === 200
-      ? `<div class="alert alert-success">${data.message}</div>`
-      : `<div class="alert alert-danger">${data.error}</div>`;
-  if (res.status === 200) {
-    setTimeout(() => {
-      bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
-      loadLots();
-    }, 1000);
-  }
-};
-
 async function deleteLot(id) {
-  if (!confirm("Are you sure you want to delete this parking lot?")) return;
+  if (!confirm("Are you sure you want to delete this lot?")) return;
   const res = await fetch(`/api/parkinglot/${id}`, {
     method: 'DELETE',
     credentials: 'same-origin'
   });
-  const data = await res.json();
-  alert(data.message || data.error);
-  loadLots();
+  if (res.ok) {
+    document.getElementById('lotMsg').innerHTML = `<div class="alert alert-success">Lot deleted successfully!</div>`;
+    loadLots();
+  } else {
+    document.getElementById('lotMsg').innerHTML = `<div class="alert alert-danger">Failed to delete lot.</div>`;
+  }
 }
 
-window.onload = loadLots;
+window.onload = () => {
+  loadLots();
+  loadAllUsers();
+};
+const lotNames = {{ lot_names|tojson }};
+const lotRevenues = {{ lot_revenues|tojson }};
+
+if (lotNames.length && lotRevenues.length) {
+  const ctx = document.getElementById('revenueChart').getContext('2d');
+  const revenueChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: lotNames,
+      datasets: [{
+        label: 'Revenue (₹)',
+        data: lotRevenues,
+        backgroundColor: 'rgba(232, 235, 54, 0.7)',
+        borderColor: 'rgba(0, 0, 0, 1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      scales: {
+        x: {
+          ticks: {
+            color: '#ffffff'  // X-axis label color
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.2)'  // Optional grid lines
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: '#ffffff',  // Y-axis label color
+            callback: function(value) {
+              return '₹' + value;
+            }
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.2)'
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#ffffff'  // Legend label color
+          }
+        }
+      }
+    }
+  });
+}
 </script>
 {% endblock %}
